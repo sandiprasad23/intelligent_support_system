@@ -16,7 +16,8 @@ GUARDRAIL = Counter(
 )
 
 
+from src.monitoring import main
+
+
 if __name__ == "__main__":
-    start_http_server(8081)
-    print("Prometheus metrics available at http://localhost:8081/metrics")
-    Event().wait()
+    main()

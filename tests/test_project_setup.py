@@ -1,8 +1,8 @@
 import json
 import sqlite3
-import subprocess
-import sys
 from pathlib import Path
+
+from src.logging_store import initialize_database
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -19,15 +19,9 @@ def test_documentation_records_have_chunking_fields():
 
 
 def test_init_db_creates_decisions_table_in_clean_directory(tmp_path):
-    subprocess.run(
-        [sys.executable, str(PROJECT_ROOT / "init_db.py")],
-        cwd=tmp_path,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-
     database_path = tmp_path / "storage" / "decisions.db"
+    initialize_database(database_path)
+
     with sqlite3.connect(database_path) as connection:
         table = connection.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='decisions'"
