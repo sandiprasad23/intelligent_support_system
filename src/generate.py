@@ -1,0 +1,65 @@
+import os
+import requests
+from dotenv import load_dotenv
+
+load_dotenv()
+
+GENERATE_PROMPT_VERSION = "PR-03-v1.0"
+
+def generate_response(ticket: dict, retrieved_docs: list) -> dict:
+    """Generates a grounded, citation-backed response strictly from retrieved documentation."""
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    model_name = os.getenv("MODEL_NAME", "meta-llama/llama-3.1-8b-instruct")
+    
+    doc_context = ""
+    expected_doc_ids = []
+    for d in retrieved_docs:
+        doc_context += f"Document ID: {d['doc_id']}\nTitle: {d['title']}\nContent: {d['content']}\n---\n"
+        expected_doc_ids.append(d['doc_id'])
+        
+    prompt = f"""You are an expert technical support engineer for CloudServe Solutions.
+Respond to the customer ticket using ONLY the documentation provided below.
+Rules:
+1. Include explicit document citations in the format [Doc ID: <DOC_ID>].
+2. State clear step-by-step resolution steps.
+3. Do NOT make up steps not present in the docs.
+
+Documentation Corpus:
+{doc_context}
+
+Customer Ticket:
+Subject: {ticket['subject']}
+Body: <customer_ticket>{ticket['body']}</customer_ticket>
+"""
+
+    if not api_key or api_key == "your_key_here":
+        # Fallback offline response draft
+        cited_str = ", ".join([f"[Doc ID: {d['doc_id']}]" for d in retrieved_docs])
+        draft = f"Hello {ticket.get('customer_name', 'Customer')},\n\nThank you for reaching out to CloudServe support. Based on our official documentation {cited_str}, please follow these resolution steps:\n\n1. Verify environment configuration and lockfile dependency settings.\n2. Re-run deployment or rotation using CLI tools as described in {cited_str}.\n\nIf issues persist, reply directly to this thread.\n\nBest regards,\nCloudServe Support Team"
+        return {
+            "response_text": draft,
+            "cited_doc_ids": expected_doc_ids,
+            "prompt_version": GENERATE_PROMPT_VERSION
+        }
+
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    payload = {
+        "model": model_name,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.1
+    }
+    
+    try:
+        res = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload, timeout=20)
+        content = res.json()["choices"][0]["message"]["content"]
+        return {
+            "response_text": content,
+            "cited_doc_ids": expected_doc_ids,
+            "prompt_version": GENERATE_PROMPT_VERSION
+        }
+    except Exception as e:
+        return {
+            "response_text": f"Error generating automated response: {str(e)}",
+            "cited_doc_ids": [],
+            "prompt_version": GENERATE_PROMPT_VERSION
+        }

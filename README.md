@@ -33,11 +33,19 @@ Expose Prometheus metrics locally:
 python monitoring.py
 ```
 
-The metrics endpoint is `http://localhost:8081/metrics`. In a second terminal, start Prometheus from the project root using `prometheus.yml`. On machines whose hostname causes URL parsing errors, run:
+The metrics endpoint is `http://localhost:8001/metrics`. In a second terminal, start Prometheus from the project root using `prometheus.yml`. On machines whose hostname causes URL parsing errors, run:
 
 ```bash
 prometheus --config.file=prometheus.yml --web.listen-address=127.0.0.1:9090 --web.external-url=http://localhost:9090/
 ```
+
+Run the API instead of the standalone metrics process to expose metrics from API requests:
+
+```bash
+python -m src.api
+```
+
+The API is available at `http://localhost:8000`; its metrics endpoint is `http://localhost:8001/metrics`. Stop any separately running `monitoring.py` process first, or set `METRICS_PORT` to a free port and update `prometheus.yml` to scrape that port. `API_PORT` can change the API port if 8000 is occupied.
 
 ## Tests
 
