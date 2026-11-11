@@ -1,9 +1,11 @@
 import os
 import json
+from pathlib import Path
 import requests
 from dotenv import load_dotenv
 
-load_dotenv()
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+load_dotenv(PROJECT_ROOT / ".env")
 
 VALID_INTENTS = [
     "data_residency", "data_export", "rollback_request", "deployment_failure",
@@ -21,20 +23,17 @@ def classify_ticket(ticket: dict) -> dict:
     api_key = os.getenv("OPENROUTER_API_KEY")
     model_name = os.getenv("MODEL_NAME", "meta-llama/llama-3.1-8b-instruct")
     
-    prompt = f"""You are an expert support classifier for CloudServe Solutions.
-Analyze the following customer ticket and output JSON with:
-1. "intent": string (must be one of {VALID_INTENTS})
-2. "urgency": string ("high", "medium", "low")
-3. "confidence": float between 0.0 and 1.0
-4. "extracted_entities": list of extracted parameters (e.g. error codes, service names)
-
-Ticket Context:
-Channel: {ticket['channel']}
-Tier: {ticket['customer_tier']}
-Fluency: {ticket['language_fluency']}
-Subject: {ticket['subject']}
-Body: <customer_ticket>{ticket['body']}</customer_ticket>
-"""
+    prompt_template = (PROJECT_ROOT / "prompts" / "classify_v1.txt").read_text(
+        encoding="utf-8"
+    )
+    prompt = prompt_template.format(
+        valid_intents=", ".join(VALID_INTENTS),
+        channel=ticket["channel"],
+        tier=ticket["customer_tier"],
+        fluency=ticket["language_fluency"],
+        subject=ticket["subject"],
+        body=ticket["body"],
+    )
     
     if not api_key or api_key == "your_key_here":
         # Rule-based fallback for test/offline environments

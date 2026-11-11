@@ -1,8 +1,10 @@
 import os
+from pathlib import Path
 import requests
 from dotenv import load_dotenv
 
-load_dotenv()
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+load_dotenv(PROJECT_ROOT / ".env")
 
 GENERATE_PROMPT_VERSION = "PR-03-v1.0"
 
@@ -17,20 +19,14 @@ def generate_response(ticket: dict, retrieved_docs: list) -> dict:
         doc_context += f"Document ID: {d['doc_id']}\nTitle: {d['title']}\nContent: {d['content']}\n---\n"
         expected_doc_ids.append(d['doc_id'])
         
-    prompt = f"""You are an expert technical support engineer for CloudServe Solutions.
-Respond to the customer ticket using ONLY the documentation provided below.
-Rules:
-1. Include explicit document citations in the format [Doc ID: <DOC_ID>].
-2. State clear step-by-step resolution steps.
-3. Do NOT make up steps not present in the docs.
-
-Documentation Corpus:
-{doc_context}
-
-Customer Ticket:
-Subject: {ticket['subject']}
-Body: <customer_ticket>{ticket['body']}</customer_ticket>
-"""
+    prompt_template = (PROJECT_ROOT / "prompts" / "respond_v1.txt").read_text(
+        encoding="utf-8"
+    )
+    prompt = prompt_template.format(
+        documentation_corpus=doc_context,
+        subject=ticket["subject"],
+        body=ticket["body"],
+    )
 
     if not api_key or api_key == "your_key_here":
         # Fallback offline response draft

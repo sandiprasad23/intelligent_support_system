@@ -1,6 +1,6 @@
 # Support System
 
-A Python 3.11 support-ticket assistant project. Runtime application modules live in `src/`, source datasets live in `data/`, and generated databases and vector indexes live in `storage/`.
+A Python 3.11 support-ticket assistant project. Runtime modules live in `src/`, versioned prompts in `prompts/`, evaluation tools and dated results in `evaluation/`, architecture notes in `docs/`, source datasets in `data/`, and generated databases/vector indexes in `storage/`.
 
 ## Setup
 
@@ -54,3 +54,19 @@ python -m pytest tests/ -v
 ```
 
 GitHub Actions runs this offline test suite on pushes and pull requests. Model API calls are not part of CI.
+
+## Evaluation
+
+Build the vector index first. The harness requires an input ticket file and an output report path, so the same command can accept the hidden set without code changes:
+
+```bash
+python -m evaluation.harness data/validation_tickets.json evaluation/results/validation.json
+```
+
+For tickets that have matching records in `ground_truth_responses.json`, include the optional reference file to score required mentions and prohibited claims:
+
+```bash
+python -m evaluation.harness data/development_tickets.json evaluation/results/development.json --ground-truth data/ground_truth_responses.json
+```
+
+The report includes intent, urgency, route, and answerability accuracy; retrieval Hit@K and Recall@K; citation precision and recall; protected-ticket violations; response latency; and slices by tier, region, and language fluency. Reference-text metrics are calculated only for IDs that match the optional reference file. For assessment, pass the hidden dataset path as the first argument and the desired JSON report path as the second. See [docs/architecture.md](docs/architecture.md) for module and data boundaries.

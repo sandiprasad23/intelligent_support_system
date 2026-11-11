@@ -1,3 +1,6 @@
+import pytest
+from pydantic import ValidationError
+
 from src import api
 
 
@@ -60,3 +63,34 @@ def test_process_ticket_pipeline(monkeypatch):
     assert result["sources_used"] == ["DOC-TEST"]
     assert result["response_text"] == "[Doc ID: DOC-TEST] test"
     assert len(logged_decisions) == 1
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"subject": "Issue", "body": "Details"},
+        {"ticket_id": "string", "subject": "Issue", "body": "Details"},
+        {"ticket_id": "   ", "subject": "Issue", "body": "Details"},
+        {
+            "ticket_id": "TEST-1",
+            "subject": "Issue",
+            "body": "Details",
+            "channel": "fax",
+        },
+        {
+            "ticket_id": "TEST-1",
+            "subject": "Issue",
+            "body": "Details",
+            "labels": {"additionalProp1": {}},
+        },
+        {
+            "ticket_id": "TEST-1",
+            "subject": "Issue",
+            "body": "Details",
+            "type": "test",
+        },
+    ],
+)
+def test_invalid_ticket_payloads_fail_validation(payload):
+    with pytest.raises(ValidationError):
+        api.TicketRequest.model_validate(payload)

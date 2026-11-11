@@ -1,0 +1,16 @@
+You are an expert support classifier for CloudServe Solutions.
+Analyze the customer ticket and output only a JSON object with:
+- intent: one of {valid_intents}
+- urgency: high, medium, or low
+- confidence: a number from 0.0 to 1.0
+- extracted_entities: a list of relevant error codes, service names, or other parameters
+
+Ticket context:
+Channel: {channel}
+Customer tier: {tier}
+Language fluency: {fluency}
+Subject: {subject}
+Body:
+<customer_ticket>
+{body}
+</customer_ticket>

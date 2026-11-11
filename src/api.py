@@ -3,7 +3,8 @@ import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from typing import Literal
 from src.ingest import normalize_ticket
 from src.classify import classify_ticket
 from src.retrieve import retrieve_docs
@@ -31,20 +32,41 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+class TicketLabels(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    intent: str | None = None
+    urgency: Literal["high", "medium", "low"] | None = None
+    expected_route: Literal["auto_respond", "escalate"] | None = None
+    answerable_from_docs: bool | None = None
+    expected_doc_ids: list[str] = Field(default_factory=list)
+    must_not_auto_respond: bool = False
+
+
 class TicketRequest(BaseModel):
-    ticket_id: str
-    channel: str = "email"
-    subject: str
-    body: str
-    customer_tier: str = "standard"
-    language_fluency: str = "fluent"
-    labels: dict = Field(default_factory=dict)
+    model_config = ConfigDict(extra="forbid")
+
+    ticket_id: str = Field(examples=["DEV-0001"])
+    channel: Literal["email", "chat", "docs_comment", "forum"] = "email"
+    subject: str = Field(examples=["Cannot log in to the console"])
+    body: str = Field(examples=["I cannot sign in to my account."])
+    customer_tier: Literal["standard", "business", "enterprise"] = "standard"
+    language_fluency: Literal["fluent", "non_fluent"] = "fluent"
+    labels: TicketLabels = Field(default_factory=TicketLabels)
+
+    @field_validator("ticket_id", "subject", "body")
+    @classmethod
+    def reject_blank_or_placeholder_text(cls, value):
+        value = value.strip()
+        if not value or value.casefold() == "string":
+            raise ValueError("Provide a non-empty value instead of the Swagger placeholder.")
+        return value
 
 @app.post("/process_ticket")
 def process_ticket_endpoint(ticket: TicketRequest):
     start_time = time.time()
     t_dict = ticket.model_dump()
-    t_dict["raw"] = {"labels": ticket.labels}
+    t_dict["raw"] = {"labels": ticket.labels.model_dump(exclude_none=True)}
     
     # 1. Ingest & Normalize
     norm_ticket = normalize_ticket(t_dict)
