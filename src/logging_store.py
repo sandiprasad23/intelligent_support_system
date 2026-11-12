@@ -1,3 +1,4 @@
+import json
 import os
 import sqlite3
 import uuid
@@ -7,6 +8,14 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DATABASE_PATH = PROJECT_ROOT / "storage" / "decisions.db"
+AUDIT_COLUMNS = {
+    "input_summary": "TEXT NOT NULL DEFAULT '{}'",
+    "model_name": "TEXT NOT NULL DEFAULT ''",
+    "prediction_json": "TEXT NOT NULL DEFAULT '{}'",
+    "alternatives_json": "TEXT NOT NULL DEFAULT '[]'",
+    "stage_results": "TEXT NOT NULL DEFAULT '{}'",
+    "guardrail_results": "TEXT NOT NULL DEFAULT '{}'",
+}
 
 
 def _database_path_from_config():
@@ -38,10 +47,59 @@ def initialize_database(database_path=DEFAULT_DATABASE_PATH):
                 sources_used    TEXT,
                 guardrails      TEXT,
                 prompt_version  TEXT,
-                requirement_ids TEXT
+                requirement_ids TEXT,
+                input_summary TEXT NOT NULL DEFAULT '{}',
+                model_name TEXT NOT NULL DEFAULT '',
+                prediction_json TEXT NOT NULL DEFAULT '{}',
+                alternatives_json TEXT NOT NULL DEFAULT '[]',
+                stage_results TEXT NOT NULL DEFAULT '{}',
+                guardrail_results TEXT NOT NULL DEFAULT '{}'
             )
             """
         )
+        existing_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(decisions)")
+        }
+        for column_name, definition in AUDIT_COLUMNS.items():
+            if column_name not in existing_columns:
+                connection.execute(
+                    f"ALTER TABLE decisions ADD COLUMN {column_name} {definition}"
+                )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS llm_usage (
+                usage_date TEXT PRIMARY KEY,
+                calls INTEGER NOT NULL
+            )
+            """
+        )
+
+
+def reserve_llm_call(limit=None):
+    """Atomically reserve one provider call from the configured UTC-day budget."""
+    if limit is None:
+        limit = int(os.getenv("MAX_LLM_CALLS_PER_DAY", "100"))
+    if limit < 1:
+        return False
+
+    database_path = _database_path_from_config()
+    initialize_database(database_path)
+    usage_date = datetime.now(timezone.utc).date().isoformat()
+    with sqlite3.connect(database_path, timeout=10) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        row = connection.execute(
+            "SELECT calls FROM llm_usage WHERE usage_date = ?", (usage_date,)
+        ).fetchone()
+        if row and row[0] >= limit:
+            return False
+        connection.execute(
+            """
+            INSERT INTO llm_usage (usage_date, calls) VALUES (?, 1)
+            ON CONFLICT(usage_date) DO UPDATE SET calls = calls + 1
+            """,
+            (usage_date,),
+        )
+        return True
 
 
 def log_decision(
@@ -56,17 +114,34 @@ def log_decision(
     guardrails: str = "",
     prompt_version: str = "",
     requirement_ids: str = "",
+    input_summary=None,
+    model_name: str = "",
+    prediction_details=None,
+    alternatives=None,
+    stage_results=None,
+    guardrail_results=None,
 ):
     database_path = _database_path_from_config()
     initialize_database(database_path)
+    serialized_sources = json.dumps(
+        [item for item in sources_used.split(",") if item]
+        if isinstance(sources_used, str)
+        else (sources_used or []),
+        ensure_ascii=True,
+    )
+    serialized_guardrails = json.dumps(
+        {"summary": guardrails} if isinstance(guardrails, str) else (guardrails or {}),
+        ensure_ascii=True,
+    )
     with sqlite3.connect(database_path) as connection:
         connection.execute(
             """
             INSERT INTO decisions (
                 decision_id, created_at, ticket_id, stage, prediction, confidence,
                 threshold, action_taken, reason, sources_used, guardrails,
-                prompt_version, requirement_ids
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                prompt_version, requirement_ids, input_summary, model_name,
+                prediction_json, alternatives_json, stage_results, guardrail_results
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 str(uuid.uuid4()),
@@ -78,10 +153,16 @@ def log_decision(
                 threshold,
                 action_taken,
                 reason,
-                sources_used,
-                guardrails,
+                serialized_sources,
+                serialized_guardrails,
                 prompt_version,
-                requirement_ids,
+                json.dumps(requirement_ids if not isinstance(requirement_ids, str) else [item for item in requirement_ids.split(",") if item]),
+                json.dumps(input_summary or {}, ensure_ascii=True),
+                model_name,
+                json.dumps(prediction_details or {}, ensure_ascii=True),
+                json.dumps(alternatives or [], ensure_ascii=True),
+                json.dumps(stage_results or {}, ensure_ascii=True),
+                json.dumps(guardrail_results or {}, ensure_ascii=True),
             ),
         )
 

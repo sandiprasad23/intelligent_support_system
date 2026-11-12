@@ -1,12 +1,37 @@
 import os
 import json
+from functools import lru_cache
 from pathlib import Path
+from time import perf_counter
 from langchain_community.vectorstores import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from dotenv import load_dotenv
 
 RETRIEVE_PROMPT_VERSION = "PR-02-v1.0"
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+@lru_cache(maxsize=2)
+def _vector_store(chroma_path: str, model_name: str):
+    embeddings = HuggingFaceEmbeddings(model_name=model_name)
+    return Chroma(persist_directory=chroma_path, embedding_function=embeddings)
+
+
+def warm_up_retriever():
+    """Load the embedding model once; returns seconds taken, or None if no index exists."""
+    load_dotenv(PROJECT_ROOT / ".env")
+    chroma_path = Path(os.getenv("CHROMA_PATH", "storage/chroma"))
+    if not chroma_path.is_absolute():
+        chroma_path = PROJECT_ROOT / chroma_path
+    if not chroma_path.exists():
+        return None
+    started = perf_counter()
+    try:
+        _vector_store(str(chroma_path), os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2"))
+    except Exception:
+        return None
+    return perf_counter() - started
+
 
 def retrieve_docs(ticket: dict, intent: str, top_k: int = 3) -> list:
     """Retrieves relevant knowledge base documentation chunks."""
@@ -18,30 +43,48 @@ def retrieve_docs(ticket: dict, intent: str, top_k: int = 3) -> list:
     if not doc_path.is_absolute():
         doc_path = PROJECT_ROOT / doc_path
     
+    source_docs = []
+    if doc_path.exists():
+        with doc_path.open(encoding="utf-8") as source:
+            source_docs = json.load(source)
+    review_age_by_id = {
+        document["doc_id"]: document.get("last_reviewed_days_ago", 0)
+        for document in source_docs
+    }
+
     if chroma_path.exists():
         try:
-            embeddings = HuggingFaceEmbeddings(model_name=os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2"))
-            store = Chroma(persist_directory=str(chroma_path), embedding_function=embeddings)
+            store = _vector_store(
+                str(chroma_path), os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+            )
             query = f"{intent} {ticket['subject']} {ticket['body']}"
-            results = store.similarity_search(query, k=top_k)
+            results = store.similarity_search_with_relevance_scores(query, k=top_k)
             retrieved = []
-            for doc in results:
+            for doc, score in results:
                 retrieved.append({
                     "doc_id": doc.metadata.get("doc_id", "DOC-UNKNOWN"),
                     "title": doc.metadata.get("title", ""),
-                    "content": doc.page_content
+                    "content": doc.page_content,
+                    "score": float(score),
+                    "review_age_days": review_age_by_id.get(doc.metadata.get("doc_id")),
+                    "retrieval_mode": "vector",
                 })
             return retrieved
-        except Exception as e:
+        except Exception:
             pass
             
     # Fallback to direct json search if vector store is uninitialized
-    if doc_path.exists():
-        with doc_path.open(encoding="utf-8") as f:
-            docs = json.load(f)
+    if source_docs:
         matches = []
-        for d in docs:
-            matches.append({"doc_id": d["doc_id"], "title": d["title"], "content": d["content"]})
+        for document in source_docs:
+            matches.append({
+                "doc_id": document["doc_id"],
+                "title": document["title"],
+                "content": document["content"],
+                "score": None,
+                "review_age_days": document.get("last_reviewed_days_ago", 0),
+                "retrieval_mode": "json_fallback",
+            })
         return matches[:top_k]
         
     return []

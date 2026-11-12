@@ -234,43 +234,49 @@ def test_evaluation_harness_accepts_input_and_output_paths(tmp_path, monkeypatch
         ),
         encoding="utf-8",
     )
+    from src import api
+
+    seen_labels = []
     monkeypatch.setattr(
-        harness,
+        api,
         "classify_ticket",
-        lambda ticket: {"intent": "api_key_issue", "urgency": "medium", "confidence": 0.9},
-    )
-    monkeypatch.setattr(
-        harness,
-        "retrieve_docs",
-        lambda ticket, intent, top_k: [
-            {"doc_id": "DOC-AUTH-004", "title": "Key", "content": "Rotate it."}
-        ],
-    )
-    monkeypatch.setattr(
-        harness,
-        "determine_route",
-        lambda ticket, classification, documents: {
-            "action": "auto_respond",
-            "reason": "test",
-            "threshold": 0.8,
+        lambda ticket: {
+            "intent": "api_key_issue", "urgency": "medium", "confidence": 0.9,
+            "provider_mode": "provider_completed", "prompt_version": "PR-01-v1.1",
         },
     )
     monkeypatch.setattr(
-        harness,
+        api,
+        "retrieve_docs",
+        lambda ticket, intent: [
+            {"doc_id": "DOC-AUTH-004", "title": "Key", "content": "Rotate it.",
+             "score": 0.9, "review_age_days": 0, "retrieval_mode": "vector"}
+        ],
+    )
+
+    def fake_route(ticket, classification, documents):
+        seen_labels.append(ticket["raw"]["labels"])
+        return {"action": "auto_respond", "reason": "test", "threshold": 0.8}
+
+    monkeypatch.setattr(api, "determine_route", fake_route)
+    monkeypatch.setattr(
+        api,
         "generate_response",
         lambda ticket, documents: {"response_text": "[Doc ID: DOC-AUTH-004] Rotate it."},
     )
-    monkeypatch.setattr(
-        harness,
-        "check_pii_and_hallucinations",
-        lambda response, documents: {
-            "passed": True,
-            "violations": [],
-            "sanitized_response": response,
-        },
-    )
+    run_log = tmp_path / "run_log.jsonl"
 
-    report = run_evaluation(input_path, output_path)
+    report = run_evaluation(input_path, output_path, warm_up=False, run_log_path=run_log)
+
+    assert "expected_route" not in seen_labels[0]
+    assert seen_labels[0]["must_not_auto_respond"] is False
+    assert report["decision_log"]["matches"]
+    assert report["manifest"]["tickets"] == 1
+    assert {item["measure"] for item in report["results_table"]} >= {
+        "First contact resolution", "Latency, 95th percentile", "Confidence calibration",
+    }
+    assert report["caution_statement"].startswith("The figures above should be treated with caution because")
+    assert len(run_log.read_text(encoding="utf-8").splitlines()) == 1
 
     assert output_path.exists()
     assert report["metrics"]["intent_accuracy"] == 1.0
@@ -294,6 +300,8 @@ def test_evaluation_harness_accepts_input_and_output_paths(tmp_path, monkeypatch
         input_path,
         tmp_path / "reports" / "quality.json",
         ground_truth_path=ground_truth_path,
+        warm_up=False,
+        run_log_path=run_log,
     )
     assert quality_report["metrics"]["reference_response_matches"] == 1
     assert quality_report["metrics"]["must_mention_recall"] == 1.0

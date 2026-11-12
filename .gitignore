@@ -5,6 +5,7 @@ __pycache__/
 .pytest_cache/
 storage/
 evaluation/results/*.json
+evaluation/results/*.db
 !evaluation/results/.gitkeep
 data/chunks_head/
 data/wal/

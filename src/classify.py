@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import requests
 from dotenv import load_dotenv
+from src.logging_store import reserve_llm_call
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(PROJECT_ROOT / ".env")
@@ -16,11 +17,18 @@ VALID_INTENTS = [
     "unclear_request", "rate_limit"
 ]
 
-CLASSIFY_PROMPT_VERSION = "PR-01-v1.0"
+CLASSIFY_PROMPT_VERSION = "PR-01-v1.1"
+
+
+def _configured_api_key():
+    api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
+    if not api_key or api_key.casefold() == "your_key_here" or api_key.casefold().startswith("enter your"):
+        return None
+    return api_key
 
 def classify_ticket(ticket: dict) -> dict:
     """Classifies ticket intent, urgency, and extracts key entities."""
-    api_key = os.getenv("OPENROUTER_API_KEY")
+    api_key = _configured_api_key()
     model_name = os.getenv("MODEL_NAME", "meta-llama/llama-3.1-8b-instruct")
     
     prompt_template = (PROJECT_ROOT / "prompts" / "classify_v1.txt").read_text(
@@ -35,7 +43,7 @@ def classify_ticket(ticket: dict) -> dict:
         body=ticket["body"],
     )
     
-    if not api_key or api_key == "your_key_here":
+    if not api_key:
         # Rule-based fallback for test/offline environments
         body_lower = ticket['body'].lower()
         if "rollback" in body_lower or "revert" in body_lower:
@@ -53,31 +61,72 @@ def classify_ticket(ticket: dict) -> dict:
         return {
             "intent": intent,
             "urgency": urgency,
-            "confidence": 0.85,
+            "confidence": 0.65,
             "extracted_entities": [],
-            "prompt_version": CLASSIFY_PROMPT_VERSION
+            "prompt_version": CLASSIFY_PROMPT_VERSION,
+            "provider_mode": "offline_rules",
+            "alternatives": [],
+        }
+
+    if not reserve_llm_call():
+        return {
+            "intent": "unclear_request",
+            "urgency": "medium",
+            "confidence": 0.0,
+            "extracted_entities": [],
+            "prompt_version": CLASSIFY_PROMPT_VERSION,
+            "provider_error": "daily_provider_call_budget_exhausted",
         }
 
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     payload = {
         "model": model_name,
         "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.0
+        "temperature": 0.0,
+        "max_tokens": 500,
     }
     
     try:
         res = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload, timeout=15)
+        res.raise_for_status()
         res_json = res.json()
         content = res_json["choices"][0]["message"]["content"]
         # Parse json structure
         match = json.loads(content[content.find('{'):content.rfind('}')+1])
+        if match.get("intent") not in VALID_INTENTS:
+            raise ValueError("Classifier returned an unsupported intent.")
+        if match.get("urgency") not in {"high", "medium", "low"}:
+            raise ValueError("Classifier returned an unsupported urgency.")
+        confidence = float(match.get("confidence", -1))
+        if not 0.0 <= confidence <= 1.0:
+            raise ValueError("Classifier returned an invalid confidence score.")
+        alternatives = []
+        raw_alternatives = match.get("alternatives", [])
+        if isinstance(raw_alternatives, list):
+            for alternative in raw_alternatives[:3]:
+                if not isinstance(alternative, dict) or alternative.get("intent") not in VALID_INTENTS:
+                    continue
+                try:
+                    alternative_confidence = float(alternative.get("confidence", -1))
+                except (TypeError, ValueError):
+                    continue
+                if 0.0 <= alternative_confidence <= 1.0:
+                    alternatives.append(
+                        {
+                            "intent": alternative["intent"],
+                            "confidence": alternative_confidence,
+                        }
+                    )
+        match["confidence"] = confidence
+        match["alternatives"] = alternatives
         match["prompt_version"] = CLASSIFY_PROMPT_VERSION
         return match
-    except Exception as e:
+    except Exception as error:
         return {
             "intent": "unclear_request",
             "urgency": "medium",
-            "confidence": 0.50,
+            "confidence": 0.0,
             "extracted_entities": [],
-            "prompt_version": CLASSIFY_PROMPT_VERSION
+            "prompt_version": CLASSIFY_PROMPT_VERSION,
+            "provider_error": type(error).__name__,
         }

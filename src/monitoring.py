@@ -10,6 +10,11 @@ TICKETS_PROCESSED = Counter(
     ["channel", "outcome"],
 )
 RESPONSE_LATENCY = Histogram("response_seconds", "End to end response time in seconds")
+CLASSIFICATION_CONFIDENCE = Histogram(
+    "classification_confidence",
+    "Distribution of classifier confidence values",
+    buckets=(0.2, 0.4, 0.6, 0.8, 0.9, 0.95, 1.0),
+)
 GUARDRAIL_BLOCKS = Counter(
     "guardrail_blocks_total",
     "Responses blocked",

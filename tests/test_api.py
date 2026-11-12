@@ -13,6 +13,7 @@ def test_process_ticket_pipeline(monkeypatch):
             "channel": ticket["channel"],
             "subject": ticket["subject"],
             "body": ticket["body"],
+            "raw": {},
         },
     )
     monkeypatch.setattr(
@@ -49,6 +50,12 @@ def test_process_ticket_pipeline(monkeypatch):
         lambda response, documents: {
             "passed": True,
             "violations": [],
+            "results": {
+                "private_data": True,
+                "grounding": True,
+                "tone_scope": True,
+                "instruction_integrity": True,
+            },
             "sanitized_response": response,
         },
     )
@@ -63,6 +70,13 @@ def test_process_ticket_pipeline(monkeypatch):
     assert result["sources_used"] == ["DOC-TEST"]
     assert result["response_text"] == "[Doc ID: DOC-TEST] test"
     assert len(logged_decisions) == 1
+    assert logged_decisions[0]["stage"] == "pipeline_complete"
+    assert logged_decisions[0]["input_summary"]["body_characters"] == len("Test body")
+    assert "Test body" not in str(logged_decisions[0]["input_summary"])
+    assert "GOV-LOG-01" in logged_decisions[0]["requirement_ids"]
+    assert logged_decisions[0]["sources_used"] == [
+        {"doc_id": "DOC-TEST", "score": None}
+    ]
 
 
 @pytest.mark.parametrize(

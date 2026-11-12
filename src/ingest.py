@@ -37,7 +37,7 @@ def normalize_ticket(ticket: dict) -> dict:
     }
 
 
-def build_index(chunk_size=800, chunk_overlap=120):
+def build_index(chunk_size=600, chunk_overlap=90):
     load_dotenv(PROJECT_ROOT / ".env")
     with (PROJECT_ROOT / "data" / "documentation.json").open(encoding="utf-8") as source:
         documents = json.load(source)
@@ -55,7 +55,7 @@ def build_index(chunk_size=800, chunk_overlap=120):
                 {"doc_id": document["doc_id"], "title": document["title"]}
             )
 
-    persist_directory = PROJECT_ROOT / os.getenv("CHROMA_PATH", "storage/chroma")
+    persist_directory = PROJECT_ROOT / os.getenv("CHROMA_PATH", "storage/chroma_600_90")
     persist_directory.mkdir(parents=True, exist_ok=True)
     embeddings = HuggingFaceEmbeddings(
         model_name=os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
