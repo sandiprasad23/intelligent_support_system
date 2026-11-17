@@ -37,6 +37,39 @@ def test_percentile_and_latency_summary():
     assert summary["p95"] == 3.0
 
 
+def test_metrics_report_when_expected_escalation_rate_exceeds_target():
+    from evaluation.harness import calculate_metrics
+
+    rows = [
+        {
+            "expected_route": "escalate" if index < 4 else "auto_respond",
+            "predicted_route": "escalate",
+            "expected_intent": "unclear_request",
+            "predicted_intent": "unclear_request",
+            "expected_urgency": "high",
+            "predicted_urgency": "high",
+            "answerable_from_docs": False,
+            "predicted_answerable_from_docs": False,
+            "must_not_auto_respond": index < 4,
+            "expected_doc_ids": [],
+            "retrieved_doc_ids": [],
+            "cited_doc_ids": [],
+            "response_returned": False,
+            "latency_seconds": 0.1,
+            "guardrail_violations": [],
+            "private_data_in_response": [],
+            "input_rejected": False,
+            "reference_available": False,
+        }
+        for index in range(10)
+    ]
+
+    metrics = calculate_metrics(rows)
+
+    assert metrics["expected_escalated_tickets"] == 4
+    assert metrics["expected_escalation_rate_pct"] == 40
+
+
 def test_wilson_interval_brackets_the_estimate():
     low, high = metrics.wilson_interval(8, 10)
     assert 0 < low < 0.8 < high < 1
@@ -176,3 +209,40 @@ def test_always_human_intents_escalate_even_when_confident(intent):
     )
 
     assert result["action"] == "escalate"
+
+
+def test_explicit_feature_request_escalates_when_classifier_mislabels_it():
+    from src.route import determine_route
+
+    ticket = {
+        "subject": "",
+        "body": "It would be very useful to set spend caps per project rather than only for the whole organisation.",
+        "raw": {"labels": {}},
+    }
+    documents = [{"doc_id": "DOC-BILL-003", "score": 0.9, "review_age_days": 0,
+                  "retrieval_mode": "vector"}]
+
+    result = determine_route(
+        ticket,
+        {"intent": "quota_or_overage", "confidence": 0.85, "provider_mode": "provider_completed"},
+        documents,
+    )
+
+    assert result["action"] == "escalate"
+    assert "feature" in result["reason"].lower()
+
+
+def test_ordinary_quota_question_is_not_detected_as_feature_request():
+    from src.route import determine_route
+
+    ticket = {"subject": "", "body": "How much quota is included in our current plan?", "raw": {"labels": {}}}
+    documents = [{"doc_id": "DOC-BILL-003", "score": 0.9, "review_age_days": 0,
+                  "retrieval_mode": "vector"}]
+
+    result = determine_route(
+        ticket,
+        {"intent": "quota_or_overage", "confidence": 0.85, "provider_mode": "provider_completed"},
+        documents,
+    )
+
+    assert result["action"] == "auto_respond"

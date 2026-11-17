@@ -1,9 +1,24 @@
 import os
+import re
 from math import isfinite
 from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+FEATURE_REQUEST_PATTERNS = (
+    re.compile(r"\bfeature\s+(?:request|suggestion)\b", re.IGNORECASE),
+    re.compile(
+        r"\b(?:would|could|should|please|can you|we need|i need)\b"
+        r".{0,80}\b(?:add|support|allow|enable|offer|introduce|provide|set|create)\b"
+        r".{0,80}\b(?:feature|option|ability|cap|limit|setting|functionality)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:useful|helpful|great|nice)\b.{0,40}\bto\b"
+        r".{0,60}\b(?:add|support|allow|enable|offer|introduce|provide|set|create)\b",
+        re.IGNORECASE,
+    ),
+)
 
 
 def auto_response_disabled():
@@ -13,6 +28,12 @@ def auto_response_disabled():
     if not configured_path.is_absolute():
         configured_path = PROJECT_ROOT / configured_path
     return configured_path.exists()
+
+
+def _explicit_feature_request(ticket):
+    text = " ".join((ticket.get("subject", ""), ticket.get("body", "")))
+    return any(pattern.search(text) for pattern in FEATURE_REQUEST_PATTERNS)
+
 
 def determine_route(ticket: dict, classification: dict, retrieved_docs: list) -> dict:
     """Evaluates auto-response vs escalation decision thresholds."""
@@ -33,6 +54,13 @@ def determine_route(ticket: dict, classification: dict, retrieved_docs: list) ->
         return {
             "action": "escalate",
             "reason": "Automatic responses are disabled by the operator kill switch.",
+            "threshold": confidence_threshold,
+        }
+
+    if _explicit_feature_request(ticket):
+        return {
+            "action": "escalate",
+            "reason": "Ticket appears to request a product feature; human review is required.",
             "threshold": confidence_threshold,
         }
     

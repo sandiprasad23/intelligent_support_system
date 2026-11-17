@@ -370,6 +370,12 @@ def calculate_metrics(rows, top_k=DEFAULT_TOP_K):
         ),
         "auto_responded_tickets": len(auto_rows),
         "escalated_tickets": total - len(auto_rows),
+        "expected_escalated_tickets": sum(row["expected_route"] == "escalate" for row in rows),
+        "expected_escalation_rate_pct": (
+            100 * sum(row["expected_route"] == "escalate" for row in rows) / total
+            if total
+            else 0.0
+        ),
         "first_contact_resolution_pct": 100 * len(auto_rows) / total if total else 0.0,
         "escalation_rate_pct": 100 * (total - len(auto_rows)) / total if total else 0.0,
         "correct_resolution_pct": (
@@ -588,7 +594,12 @@ def _build_results_table(metrics, classification, calibration, variation, covera
             f"{metrics['escalation_rate_pct']:.1f}%",
             _status(metrics["escalation_rate_pct"], 30, higher_is_better=False),
             _interval_text(metrics["escalated_tickets"], total),
-            f"Top reasons: {top_reasons}."),
+            (
+                f"Dataset labels expect {metrics['expected_escalation_rate_pct']:.1f}% escalation, "
+                "which exceeds the system target; reconcile target and evaluation population. "
+                if metrics["expected_escalation_rate_pct"] > 30
+                else ""
+            ) + f"Top reasons: {top_reasons}."),
         row("Repeat contacts", "business", "Not measured", "Halved", "not measurable",
             "not_measurable", "n/a",
             "Needs live customers over time; dataset history.repeat_contact reflects human handling."),
