@@ -53,6 +53,7 @@ ESCALATION_CATEGORIES = (
     ("override", "instruction_override"),
     ("sensitive-data", "private_data_in_ticket"),
     ("Safety governance", "labeled_must_not_auto_respond"),
+    ("requires human review", "intent_requires_human_review"),
     ("Tier 2", "high_risk_intent"),
 )
 
@@ -229,6 +230,7 @@ def _apply_audit(rows, decisions):
         ]
         row["classification_mode"] = mode
         row["classification_ran"] = mode in ("offline_rules", "provider_completed")
+        row["stage_duration_seconds"] = stages.get("duration_seconds", {})
         row["best_retrieval_score"] = max(scores) if scores else None
         row["decision_stage"] = entry["stage"]
         row["provider_failed"] = mode == "provider_failed" or stages.get("generation") == "failed"
@@ -499,9 +501,11 @@ def _previous_runs(run_log_path, input_sha):
     count = 0
     for line in run_log_path.read_text(encoding="utf-8").splitlines():
         try:
-            count += json.loads(line).get("input_sha256") == input_sha
+            entry = json.loads(line)
         except ValueError:
             continue
+        if isinstance(entry, dict):
+            count += entry.get("input_sha256") == input_sha
     return count
 
 
@@ -735,6 +739,14 @@ def run_evaluation(
         "availability_pct": 100 * (len(processed) - service_errors) / len(processed) if processed else 0.0,
         "simulated_outage": simulate_provider_outage,
         "warm_up_seconds": warm_up_seconds,
+        "stage_latency_seconds": {
+            stage: stats.latency_summary([
+                row["stage_duration_seconds"][stage]
+                for row in rows
+                if stage in row.get("stage_duration_seconds", {})
+            ])
+            for stage in ("classification", "retrieval", "generation")
+        },
         "escalation_reason_counts": Counter(
             row["escalation_category"] for row in rows if row["escalation_category"]
         ),

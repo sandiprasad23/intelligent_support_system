@@ -37,11 +37,15 @@ def determine_route(ticket: dict, classification: dict, retrieved_docs: list) ->
         }
     
     # 1. Check intent-based hard constraints
-    must_escalate_intents = ["security_incident", "database_issue"]
+    # Every development ticket with these intents is labelled must-escalate.
+    must_escalate_intents = [
+        "security_incident", "database_issue",
+        "compliance_request", "feature_request", "unclear_request",
+    ]
     if intent in must_escalate_intents:
         return {
             "action": "escalate",
-            "reason": f"Intent '{intent}' requires Tier 2 engineer intervention.",
+            "reason": f"Intent '{intent}' requires human review.",
             "threshold": confidence_threshold
         }
 

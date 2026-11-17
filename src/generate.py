@@ -7,7 +7,7 @@ from src.logging_store import reserve_llm_call
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(PROJECT_ROOT / ".env")
 
-GENERATE_PROMPT_VERSION = "PR-03-v1.1"
+GENERATE_PROMPT_VERSION = "PR-03-v1.2"
 
 
 def _configured_api_key():
@@ -59,7 +59,7 @@ def generate_response(ticket: dict, retrieved_docs: list) -> dict:
         "model": model_name,
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.1,
-        "max_tokens": 800,
+        "max_tokens": 450,
     }
     
     try:

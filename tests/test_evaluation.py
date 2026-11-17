@@ -42,6 +42,14 @@ def test_wilson_interval_brackets_the_estimate():
     assert 0 < low < 0.8 < high < 1
 
 
+def test_previous_runs_skips_invalid_and_non_object_entries(tmp_path):
+    from evaluation.harness import _previous_runs
+
+    log = tmp_path / "runs.jsonl"
+    log.write_text('null\n42\n[]\ninvalid\n{"input_sha256":"match"}\n', encoding="utf-8")
+    assert _previous_runs(log, "match") == 1
+
+
 def test_classification_summary_reports_per_class_precision():
     summary = metrics.classification_summary(["a", "a", "b", "b"], ["a", "b", "b", "b"])
     assert summary["per_class"]["b"]["precision"] == pytest.approx(2 / 3)
@@ -58,6 +66,12 @@ def test_cross_group_variation_flags_unreliable_small_groups():
     assert result["max_gap_points"] == pytest.approx(40)
     assert result["fields"]["tier"]["worst_group"] == "y"
     assert result["reliable"] is False
+
+
+def test_intent_escalation_is_categorized():
+    from evaluation.harness import _escalation_category
+
+    assert _escalation_category("Intent 'compliance_request' requires human review.") == "intent_requires_human_review"
 
 
 def test_label_free_run_and_blank_subject(tmp_path, monkeypatch):
@@ -92,6 +106,10 @@ def test_label_free_run_and_blank_subject(tmp_path, monkeypatch):
     assert not row["input_rejected"]
     assert row["predicted_route"] == "auto_respond"
     assert "expected_route" not in seen[0]
+    assert set(row["stage_duration_seconds"]) == {"classification", "retrieval", "generation"}
+    for stage in ("classification", "retrieval", "generation"):
+        assert row["stage_duration_seconds"][stage] >= 0
+        assert report["service"]["stage_latency_seconds"][stage]["count"] == 1
 
 
 def test_simulated_outage_escalates_everything(tmp_path, monkeypatch):
@@ -145,3 +163,16 @@ def test_review_export_and_score_round_trip(tmp_path):
     assert summary["hallucination_rate_pct"] == 25
     assert summary["citation_accuracy_pct"] == 75
     assert summary["satisfaction_mean"] == 4.5
+
+
+@pytest.mark.parametrize("intent", ["compliance_request", "feature_request", "unclear_request"])
+def test_always_human_intents_escalate_even_when_confident(intent):
+    from src.route import determine_route
+
+    documents = [{"doc_id": "DOC-AUTH-004", "score": 0.9, "review_age_days": 0,
+                  "retrieval_mode": "vector"}]
+    result = determine_route(
+        {"raw": {}}, {"intent": intent, "confidence": 0.95, "provider_mode": "provider_completed"}, documents
+    )
+
+    assert result["action"] == "escalate"

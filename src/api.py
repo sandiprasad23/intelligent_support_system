@@ -258,13 +258,19 @@ def _process_valid_ticket(ticket, audit_state):
             "private_data": privacy_findings,
         }
     else:
+        stage_timings = {}
+        stage_started = perf_counter()
         classification = classify_ticket(normalized_ticket)
+        stage_timings["classification"] = perf_counter() - stage_started
         stage_results["classification"] = (
             "provider_failed"
             if classification.get("provider_error")
             else classification.get("provider_mode", "provider_completed")
         )
+        stage_started = perf_counter()
         documents = retrieve_docs(normalized_ticket, classification["intent"])
+        stage_timings["retrieval"] = perf_counter() - stage_started
+        stage_results["duration_seconds"] = stage_timings
         stage_results["retrieval"] = {
             "status": "completed" if documents else "no_evidence",
             "documents_found": len(documents),
@@ -278,7 +284,9 @@ def _process_valid_ticket(ticket, audit_state):
             guardrail_results["provider_error"] = classification["provider_error"]
 
         if route["action"] == "auto_respond":
+            stage_started = perf_counter()
             generated_response = generate_response(normalized_ticket, documents)
+            stage_timings["generation"] = perf_counter() - stage_started
             if generated_response.get("provider_error"):
                 guardrail_results["provider"] = "failed"
                 guardrail_results["provider_error"] = generated_response["provider_error"]

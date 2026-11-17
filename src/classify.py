@@ -17,7 +17,7 @@ VALID_INTENTS = [
     "unclear_request", "rate_limit"
 ]
 
-CLASSIFY_PROMPT_VERSION = "PR-01-v1.1"
+CLASSIFY_PROMPT_VERSION = "PR-01-v1.2"
 
 
 def _configured_api_key():

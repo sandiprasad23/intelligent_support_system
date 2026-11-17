@@ -85,6 +85,7 @@ How the run works:
 - A run using the offline fallback, a simulated outage or an active kill switch is marked `valid_for_gate: false`. A real gate run needs a configured `OPENROUTER_API_KEY`.
 - Each run is appended to `evaluation/results/run_log.jsonl` (override with `--run-log`) so results can be compared with earlier runs of the same input.
 - `--gate` returns exit code 1 when a measured target is missed or the run is invalid. `--simulate-provider-outage` checks that every ticket escalates when the provider fails. `--no-warm-up` skips the embedding model pre-load.
+- `service.stage_latency_seconds` summarizes classification, retrieval, and generation durations separately for stages that ran. Overall ticket latency remains the end-to-end in-process measurement; stage percentiles cannot be added to obtain the overall percentile.
 
 Hallucination rate, citation accuracy and customer satisfaction need human judgement. Export a seeded sample (default 50 responses) for two assessors, then score the completed sheets and pass the summary back to the harness:
 
