@@ -6,6 +6,7 @@ __pycache__/
 storage/
 evaluation/results/*.json
 evaluation/results/*.db
+evaluation/results/*.jsonl
 !evaluation/results/.gitkeep
 data/chunks_head/
 data/wal/
