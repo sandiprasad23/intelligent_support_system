@@ -1,7 +1,7 @@
 # Governance and Safety Controls
 
 **Status:** Implemented prototype controls with limitations listed below  
-**Accountable owner:** Nabieesan (repository owner and operator; replace this name if another person is formally accountable)  
+**Accountable owner:** [Product Owner]
 **Last reviewed:** 2026-11-18
 
 This document records the controls built into this capstone. It is not a claim of production certification. The system can produce customer-facing text, so any control that is missing, untested, or pattern-based is called out explicitly.
@@ -33,14 +33,14 @@ The impact-high cells are the pre-build mitigation band. Each listed high-impact
 
 | ID | Risk | Likelihood | Impact | Score | Mitigation in this design | Accountable owner |
 |---|---|---:|---:|---:|---|---|
-| R-01 | A confidently wrong answer is sent to a customer | 2 | 3 | 6 | Keep the confidence floor in the 0.80-1.00 range; independently escalate explicit feature-request wording; validate citation IDs; require vector score >= `MIN_RETRIEVAL_SCORE` (default 0.30); escalate if scores/review ages are missing, sources are stale, or retrieval is unranked. The operator kill switch stops automatic replies. | Nabieesan, project owner/operator |
-| R-02 | Private data reaches the provider or appears in an outbound reply | 2 | 3 | 6 | Before provider calls, scan subject/body for API secrets, email addresses, phone-like numbers, customer IDs, and payment-card-like numbers; matching tickets are escalated locally. Scan every candidate reply with the same patterns; any match blocks it. The sanitized draft is not sent. Arbitrary names and unrecognized identifiers are not reliably detected. | Nabieesan, project owner/operator |
-| R-03 | Customer text attempts to override system instructions or elicit prompt disclosure | 2 | 3 | 6 | Detect common instruction-override phrases before classifier/retrieval/provider calls and escalate without generating a reply. Prompts delimit the ticket as untrusted data; output checks block obvious system/developer prompt disclosure. These phrase checks are defense in depth, not a complete injection detector. | Nabieesan, project owner/operator |
-| R-04 | Some customer groups receive worse answers | 2 | 2 | 4 | Evaluation reports quality by tier, region, language fluency, and ticket length; the configured maximum quality-gap target is under 5 percentage points. The latest 80-ticket snapshot reports a 14.2-point gap, but groups are under-sampled. Review gaps; do not infer fairness from overall averages. | Nabieesan, project owner/operator |
-| R-05 | Documentation relied upon by the system is stale | 2 | 2 | 4 | Retrieval carries each source's review age. Unknown ages or sources older than `MAX_DOC_AGE_DAYS` (default 180) force escalation. The corpus owner must review and refresh documentation; this metadata must be maintained accurately. | Nabieesan, project owner/operator |
-| R-06 | The model provider is unavailable or returns invalid output | 2 | 2 | 4 | Provider calls have timeouts and a daily call budget. Invalid classification becomes zero-confidence and escalates. Generation errors produce no draft and escalate. | Nabieesan, project owner/operator |
-| R-07 | Latency degrades under load | 2 | 2 | 4 | The target is end-to-end p95 under 3 seconds. The latest 80-ticket snapshot measured 16.50 seconds p95; provider calls dominated stage timing. Provider timeouts are 15 seconds for classification and 20 seconds for generation. Run a load test and agree an SLO before deployment; no production load test or autoscaling is included. | Nabieesan, project owner/operator |
-| R-08 | Provider costs rise unexpectedly with volume | 2 | 2 | 4 | An atomic SQLite UTC-day cap limits combined model calls to `MAX_LLM_CALLS_PER_DAY` (default 100). Classification and generation requests also cap output at 500 and 800 tokens. This is a call/token guard, not a dollar-denominated provider budget; configure a provider spend limit separately. | Nabieesan, project owner/operator |
+| R-01 | A confidently wrong answer is sent to a customer | 2 | 3 | 6 | Keep the confidence floor in the 0.80-1.00 range; independently escalate explicit feature-request wording; validate citation IDs; require vector score >= `MIN_RETRIEVAL_SCORE` (default 0.30); escalate if scores/review ages are missing, sources are stale, or retrieval is unranked. The operator kill switch stops automatic replies. | [Product Owner], project owner/operator |
+| R-02 | Private data reaches the provider or appears in an outbound reply | 2 | 3 | 6 | Before provider calls, scan subject/body for API secrets, email addresses, phone-like numbers, customer IDs, and payment-card-like numbers; matching tickets are escalated locally. Scan every candidate reply with the same patterns; any match blocks it. The sanitized draft is not sent. Arbitrary names and unrecognized identifiers are not reliably detected. | [Product Owner], project owner/operator |
+| R-03 | Customer text attempts to override system instructions or elicit prompt disclosure | 2 | 3 | 6 | Detect common instruction-override phrases before classifier/retrieval/provider calls and escalate without generating a reply. Prompts delimit the ticket as untrusted data; output checks block obvious system/developer prompt disclosure. These phrase checks are defense in depth, not a complete injection detector. | [Product Owner], project owner/operator |
+| R-04 | Some customer groups receive worse answers | 2 | 2 | 4 | Evaluation reports quality by tier, region, language fluency, and ticket length; the configured maximum quality-gap target is under 5 percentage points. The latest 80-ticket snapshot reports a 14.2-point gap, but groups are under-sampled. Review gaps; do not infer fairness from overall averages. | [Product Owner], project owner/operator |
+| R-05 | Documentation relied upon by the system is stale | 2 | 2 | 4 | Retrieval carries each source's review age. Unknown ages or sources older than `MAX_DOC_AGE_DAYS` (default 180) force escalation. The corpus owner must review and refresh documentation; this metadata must be maintained accurately. | [Product Owner], project owner/operator |
+| R-06 | The model provider is unavailable or returns invalid output | 2 | 2 | 4 | Provider calls have timeouts and a daily call budget. Invalid classification becomes zero-confidence and escalates. Generation errors produce no draft and escalate. | [Product Owner], project owner/operator |
+| R-07 | Latency degrades under load | 2 | 2 | 4 | The target is end-to-end p95 under 3 seconds. The latest 80-ticket snapshot measured 16.50 seconds p95; provider calls dominated stage timing. Provider timeouts are 15 seconds for classification and 20 seconds for generation. Run a load test and agree an SLO before deployment; no production load test or autoscaling is included. | [Product Owner], project owner/operator |
+| R-08 | Provider costs rise unexpectedly with volume | 2 | 2 | 4 | An atomic SQLite UTC-day cap limits combined model calls to `MAX_LLM_CALLS_PER_DAY` (default 100). Classification and generation requests also cap output at 500 and 800 tokens. This is a call/token guard, not a dollar-denominated provider budget; configure a provider spend limit separately. | [Product Owner], project owner/operator |
 
 ## 2. Decision Logging
 
@@ -129,7 +129,7 @@ The privacy checks are pattern-based: they do not recognize arbitrary person nam
 
 ## 5. Incident Response
 
-The accountable incident lead is **Nabieesan, project owner/operator**. The steps below are internal response targets for this capstone, not external or legal notification SLAs.
+The accountable incident lead is **[Product Owner], project owner/operator**. The steps below are internal response targets for this capstone, not external or legal notification SLAs.
 
 | Step | Action | Owner | Target |
 |---|---|---|---|
