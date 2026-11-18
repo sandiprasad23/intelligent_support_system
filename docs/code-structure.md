@@ -1,4 +1,4 @@
-# Architecture
+# Code Structure
 
 ## Request flow
 
