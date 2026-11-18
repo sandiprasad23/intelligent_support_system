@@ -1,1 +1,0 @@
-{"run_at": "2026-11-12T13:15:38.199157+00:00", "input_file": "validation_tickets.json", "input_sha256": "94c5b1adc1203f06d59522a909d755e8671e9bf1b165a0bc5a74ab62501c827b", "tickets": 80, "system_version": {"commit": "1bacfa8", "uncommitted_changes_in_system_code": true}, "provider_mode": "provider", "simulated_outage": false, "valid_for_gate": true, "gate_passed": false}
