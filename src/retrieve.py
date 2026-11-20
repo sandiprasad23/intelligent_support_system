@@ -6,9 +6,10 @@ from time import perf_counter
 from langchain_community.vectorstores import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from dotenv import load_dotenv
+from src.config import PROJECT_ROOT, env_value
 
 RETRIEVE_PROMPT_VERSION = "PR-02-v1.0"
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = PROJECT_ROOT
 
 
 @lru_cache(maxsize=2)
@@ -20,14 +21,14 @@ def _vector_store(chroma_path: str, model_name: str):
 def warm_up_retriever():
     """Load the embedding model once; returns seconds taken, or None if no index exists."""
     load_dotenv(PROJECT_ROOT / ".env")
-    chroma_path = Path(os.getenv("CHROMA_PATH", "storage/chroma"))
+    chroma_path = Path(env_value("CHROMA_PATH"))
     if not chroma_path.is_absolute():
         chroma_path = PROJECT_ROOT / chroma_path
     if not chroma_path.exists():
         return None
     started = perf_counter()
     try:
-        _vector_store(str(chroma_path), os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2"))
+        _vector_store(str(chroma_path), env_value("EMBEDDING_MODEL"))
     except Exception:
         return None
     return perf_counter() - started
@@ -36,7 +37,7 @@ def warm_up_retriever():
 def retrieve_docs(ticket: dict, intent: str, top_k: int = 3) -> list:
     """Retrieves relevant knowledge base documentation chunks."""
     load_dotenv(PROJECT_ROOT / ".env")
-    chroma_path = Path(os.getenv("CHROMA_PATH", "storage/chroma"))
+    chroma_path = Path(env_value("CHROMA_PATH"))
     doc_path = Path(os.getenv("DOC_PATH", "data/documentation.json"))
     if not chroma_path.is_absolute():
         chroma_path = PROJECT_ROOT / chroma_path
@@ -55,7 +56,7 @@ def retrieve_docs(ticket: dict, intent: str, top_k: int = 3) -> list:
     if chroma_path.exists():
         try:
             store = _vector_store(
-                str(chroma_path), os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+                str(chroma_path), env_value("EMBEDDING_MODEL")
             )
             query = f"{intent} {ticket['subject']} {ticket['body']}"
             results = store.similarity_search_with_relevance_scores(query, k=top_k)

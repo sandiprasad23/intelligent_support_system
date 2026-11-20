@@ -1,17 +1,12 @@
-import os
-from pathlib import Path
 import requests
-from dotenv import load_dotenv
+from src.config import PROJECT_ROOT, env_value
 from src.logging_store import reserve_llm_call
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-load_dotenv(PROJECT_ROOT / ".env")
 
 GENERATE_PROMPT_VERSION = "PR-03-v1.2"
 
 
 def _configured_api_key():
-    api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
+    api_key = env_value("OPENROUTER_API_KEY", allow_empty=True).strip()
     if not api_key or api_key.casefold() == "your_key_here" or api_key.casefold().startswith("enter your"):
         return None
     return api_key
@@ -19,7 +14,7 @@ def _configured_api_key():
 def generate_response(ticket: dict, retrieved_docs: list) -> dict:
     """Generates a grounded, citation-backed response strictly from retrieved documentation."""
     api_key = _configured_api_key()
-    model_name = os.getenv("MODEL_NAME", "meta-llama/llama-3.1-8b-instruct")
+    model_name = env_value("MODEL_NAME")
     
     doc_context = ""
     expected_doc_ids = []

@@ -13,17 +13,19 @@ python -m pip install -r requirements.txt
 test -e .env || cp .env.example .env
 ```
 
-Create `.env` as per below keys. Replace the dummy values with original values to work properly. only if `.env` does not already exist; do not overwrite an existing file that may contain credentials. Edit `.env` with the values needed for your local environment. Never commit `.env` or API keys.
+Create `.env` only if it does not already exist so existing credentials are not overwritten, then replace any placeholder values with the values required for your environment. Never commit `.env` or API keys.
 
-Keep the below keys in the `.env` file.
+Keep the following keys in `.env`. The values are examples only; the application requires its settings from the environment and does not provide source-code defaults for these keys.
 
-OPENROUTER_API_KEY=sample_key
-MODEL_NAME=model_name
-EMBEDDING_MODEL=embedding_model
+```dotenv
+OPENROUTER_API_KEY=
+MODEL_NAME=meta-llama/llama-3.1-8b-instruct
+EMBEDDING_MODEL=all-MiniLM-L6-v2
 CHROMA_PATH=./storage/chroma
 DATABASE_URL=sqlite:///./storage/decisions.db
 LOG_LEVEL=INFO
 CONFIDENCE_THRESHOLD=0.80
+```
 
 
 Chat tickets may have a blank `subject`; `ticket_id` and `body` are required. The API pre-loads the embedding model at start-up, avoiding embedding initialization on the first request. Provider-backed classification and generation still add network/model latency to requests.

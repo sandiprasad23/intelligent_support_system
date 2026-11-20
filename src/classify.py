@@ -1,12 +1,7 @@
-import os
 import json
-from pathlib import Path
 import requests
-from dotenv import load_dotenv
+from src.config import PROJECT_ROOT, env_value
 from src.logging_store import reserve_llm_call
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-load_dotenv(PROJECT_ROOT / ".env")
 
 VALID_INTENTS = [
     "data_residency", "data_export", "rollback_request", "deployment_failure",
@@ -21,7 +16,7 @@ CLASSIFY_PROMPT_VERSION = "PR-01-v1.2"
 
 
 def _configured_api_key():
-    api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
+    api_key = env_value("OPENROUTER_API_KEY", allow_empty=True).strip()
     if not api_key or api_key.casefold() == "your_key_here" or api_key.casefold().startswith("enter your"):
         return None
     return api_key
@@ -29,7 +24,7 @@ def _configured_api_key():
 def classify_ticket(ticket: dict) -> dict:
     """Classifies ticket intent, urgency, and extracts key entities."""
     api_key = _configured_api_key()
-    model_name = os.getenv("MODEL_NAME", "meta-llama/llama-3.1-8b-instruct")
+    model_name = env_value("MODEL_NAME")
     
     prompt_template = (PROJECT_ROOT / "prompts" / "classify_v1.txt").read_text(
         encoding="utf-8"

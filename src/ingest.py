@@ -4,12 +4,10 @@ import re
 from pathlib import Path
 
 from dotenv import load_dotenv
+from src.config import PROJECT_ROOT, env_value
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
-
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def parse_non_fluent_text(raw_text: str) -> str:
@@ -55,10 +53,10 @@ def build_index(chunk_size=600, chunk_overlap=90):
                 {"doc_id": document["doc_id"], "title": document["title"]}
             )
 
-    persist_directory = PROJECT_ROOT / os.getenv("CHROMA_PATH", "storage/chroma_600_90")
+    persist_directory = PROJECT_ROOT / env_value("CHROMA_PATH")
     persist_directory.mkdir(parents=True, exist_ok=True)
     embeddings = HuggingFaceEmbeddings(
-        model_name=os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+        model_name=env_value("EMBEDDING_MODEL")
     )
     store = Chroma.from_texts(
         texts=texts,

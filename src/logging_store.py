@@ -5,9 +5,8 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from src.config import PROJECT_ROOT, env_value
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_DATABASE_PATH = PROJECT_ROOT / "storage" / "decisions.db"
 AUDIT_COLUMNS = {
     "input_summary": "TEXT NOT NULL DEFAULT '{}'",
     "model_name": "TEXT NOT NULL DEFAULT ''",
@@ -19,7 +18,7 @@ AUDIT_COLUMNS = {
 
 
 def _database_path_from_config():
-    configured_path = os.getenv("DATABASE_URL", "sqlite:///./storage/decisions.db")
+    configured_path = env_value("DATABASE_URL")
     if configured_path.startswith("sqlite:///"):
         configured_path = configured_path.removeprefix("sqlite:///")
     database_path = Path(configured_path)
@@ -28,8 +27,8 @@ def _database_path_from_config():
     return database_path
 
 
-def initialize_database(database_path=DEFAULT_DATABASE_PATH):
-    database_path = Path(database_path)
+def initialize_database(database_path=None):
+    database_path = Path(database_path) if database_path is not None else _database_path_from_config()
     database_path.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(database_path) as connection:
         connection.execute(

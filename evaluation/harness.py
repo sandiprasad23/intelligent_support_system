@@ -18,6 +18,7 @@ from pydantic import ValidationError
 from evaluation import metrics as stats
 from evaluation.metrics import CITATION_PATTERN
 from src import api
+from src.config import env_value
 from src.classify import CLASSIFY_PROMPT_VERSION, _configured_api_key
 from src.generate import GENERATE_PROMPT_VERSION
 from src.guardrails import detect_private_data
@@ -783,14 +784,14 @@ def run_evaluation(
         "tickets": len(tickets),
         "previous_runs_on_this_input": previous_runs,
         "provider_mode": provider_mode,
-        "model_name": os.getenv("MODEL_NAME", "meta-llama/llama-3.1-8b-instruct"),
+        "model_name": env_value("MODEL_NAME"),
         "prompt_versions": {
             "classify": CLASSIFY_PROMPT_VERSION,
             "retrieve": RETRIEVE_PROMPT_VERSION,
             "generate": GENERATE_PROMPT_VERSION,
         },
         "thresholds": {
-            "confidence": os.getenv("CONFIDENCE_THRESHOLD", "0.80"),
+            "confidence": env_value("CONFIDENCE_THRESHOLD"),
             "min_retrieval_score": os.getenv("MIN_RETRIEVAL_SCORE", "0.30"),
             "max_doc_age_days": os.getenv("MAX_DOC_AGE_DAYS", "180"),
         },

@@ -7,6 +7,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from src.classify import CLASSIFY_PROMPT_VERSION, classify_ticket
+from src.config import env_value
 from src.generate import GENERATE_PROMPT_VERSION, generate_response
 from src.guardrails import (
     check_pii_and_hallucinations,
@@ -112,13 +113,13 @@ def _log_ticket_decision(
     elif classification.get("provider_error") == "daily_provider_call_budget_exhausted":
         model_name = "provider-budget-exhausted"
     else:
-        model_name = os.getenv("MODEL_NAME", "configured-model")
+        model_name = env_value("MODEL_NAME")
     log_decision(
         ticket_id=ticket.ticket_id,
         stage=stage,
         prediction=classification.get("intent", "unclear_request"),
         confidence=classification.get("confidence", 0.0),
-        threshold=route.get("threshold", 0.8),
+        threshold=route.get("threshold", float(env_value("CONFIDENCE_THRESHOLD"))),
         action_taken=route["action"],
         reason=route["reason"],
         sources_used=source_records,
@@ -162,7 +163,7 @@ def process_ticket_endpoint(ticket: TicketRequest):
         failure_route = {
             "action": "escalate",
             "reason": "A processing failure occurred; no response was sent.",
-            "threshold": float(os.getenv("CONFIDENCE_THRESHOLD", "0.80")),
+            "threshold": float(env_value("CONFIDENCE_THRESHOLD")),
         }
         if not audit_state["written"]:
             try:
@@ -237,7 +238,7 @@ def _process_valid_ticket(ticket, audit_state):
                 if injection_findings
                 else "Ticket contains a recognized sensitive-data pattern; it was not sent to the model provider."
             ),
-            "threshold": float(os.getenv("CONFIDENCE_THRESHOLD", "0.80")),
+            "threshold": float(env_value("CONFIDENCE_THRESHOLD")),
         }
         skip_reason = "skipped_input_safeguard"
         stage_results["classification"] = skip_reason

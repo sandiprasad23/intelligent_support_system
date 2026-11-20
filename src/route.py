@@ -3,6 +3,8 @@ import re
 from math import isfinite
 from pathlib import Path
 
+from src.config import env_value
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 FEATURE_REQUEST_PATTERNS = (
@@ -37,7 +39,7 @@ def _explicit_feature_request(ticket):
 
 def determine_route(ticket: dict, classification: dict, retrieved_docs: list) -> dict:
     """Evaluates auto-response vs escalation decision thresholds."""
-    confidence_threshold = float(os.getenv("CONFIDENCE_THRESHOLD", "0.80"))
+    confidence_threshold = float(env_value("CONFIDENCE_THRESHOLD"))
 
     if not isfinite(confidence_threshold) or not 0.80 <= confidence_threshold <= 1.0:
         return {
