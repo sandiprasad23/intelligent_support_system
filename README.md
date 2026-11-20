@@ -4,18 +4,125 @@ A Python 3.11 support-ticket assistant project. Runtime modules live in `src/`, 
 
 Governance controls, risk register, decision-log fields, fairness methodology, incident steps, and the auto-response kill switch are documented in [docs/governance.md](docs/governance.md). [docs/application-architecture.md](docs/application-architecture.md) is the complete reference covering the pipeline, modules, governance, monitoring, evaluation and limitations.
 
-## Setup
+## Setup and run
+
+### Prerequisites
+
+- Python **3.11** with `pip` and `venv`.
+- Git.
+- Internet access to install dependencies and download the embedding model.
+- Port `8000` for the API and port `8001` for metrics must be available.
+
+### 1. Install Python 3.11 and Git
+
+- **macOS with Homebrew:**
 
 ```bash
-python3.11 -m venv .venv
-source .venv/bin/activate
+brew install python@3.11 git
+```
+
+- **Ubuntu/Debian:**
+
+```bash
+sudo apt update
+sudo apt install -y python3.11 python3.11-venv python3-pip git
+```
+
+- **Windows with WinGet (PowerShell):**
+
+```powershell
+winget install --id Python.Python.3.11 -e
+winget install --id Git.Git -e
+```
+
+- Alternatively, install Python 3.11 from [python.org](https://www.python.org/downloads/) and enable **Add Python to PATH** on Windows.
+- Restart the terminal after installation.
+
+### 2. Verify the tools
+
+macOS/Linux:
+
+```bash
+python3.11 --version
+git --version
+```
+
+Windows:
+
+```powershell
+py -3.11 --version
+git --version
+```
+
+- Python must report `3.11.x`.
+
+### 3. Get the project
+
+```bash
+git clone <repository-url>
+cd intelligent_support_system
+```
+
+- Run every remaining command from the directory containing `requirements.txt`.
+- Skip cloning and run only `cd <path-to-project>` if the repository is already present.
+
+### 4. Create and activate the virtual environment
+
+macOS/Linux:
+
+```bash
+python3.11 -m venv .venv #To create virtual env
+source .venv/bin/activate  # To activate it
+which python # To check the current python environment file. It should show the current applications .venv/bin/python path
+python -m pip install --upgrade pip
+```
+
+Windows PowerShell:
+
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+```
+
+- If PowerShell blocks activation:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+.\.venv\Scripts\Activate.ps1
+```
+
+- Verify the environment:
+
+```bash
+python --version
+python -c "import sys; print(sys.executable)"
+```
+
+- The path printed must point inside `.venv`.
+- Activate `.venv` again whenever a new terminal is opened.
+
+### 5. Install dependencies
+
+```bash
 python -m pip install -r requirements.txt
+```
+
+### 6. Configure `.env`
+
+macOS/Linux:
+
+```bash
 test -e .env || cp .env.example .env
 ```
 
-Create `.env` only if it does not already exist so existing credentials are not overwritten, then replace any placeholder values with the values required for your environment. Never commit `.env` or API keys.
+Windows PowerShell:
 
-Keep the following keys in `.env`. The values are examples only; the application requires its settings from the environment and does not provide source-code defaults for these keys.
+```powershell
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
+```
+
+Edit `.env` with the required local values:
 
 ```dotenv
 OPENROUTER_API_KEY=
@@ -27,100 +134,132 @@ LOG_LEVEL=INFO
 CONFIDENCE_THRESHOLD=0.80
 ```
 
+- Do not commit `.env` or a real API key.
+- `OPENROUTER_API_KEY` can remain blank for offline tests and offline fallback behavior.
+- A real key and valid `MODEL_NAME` are required for provider-backed responses and valid evaluation runs.
+- These values come from `.env`; the application does not provide source-code defaults for them.
 
-Chat tickets may have a blank `subject`; `ticket_id` and `body` are required. The API pre-loads the embedding model at start-up, avoiding embedding initialization on the first request. Provider-backed classification and generation still add network/model latency to requests.
-
-The example leaves `OPENROUTER_API_KEY` empty. In that mode, keyword classification is for local development and always escalates; it will not auto-reply. Provider-enabled requests are limited by `MAX_LLM_CALLS_PER_DAY`; passing the confidence, retrieval-score and document-age thresholds is necessary but not sufficient for an automatic response. The router also escalates high-risk intents, explicit feature requests, offline/provider failures, unsafe or stale evidence, and other governance conditions. Calls to the configured provider may incur cost.
-
-## Current scripts
-
-Initialize the SQLite decision log:
+### 7. Initialize the application
 
 ```bash
 python init_db.py
-```
-
-Build the documentation vector index:
-
-```bash
 python data-chunking.py
 ```
 
-Expose Prometheus metrics locally:
+- `init_db.py` creates the SQLite tables.
+- `data-chunking.py` builds the documentation vector index and may download the embedding model on its first run.
 
-```bash
-python monitoring.py
-```
-
-The metrics endpoint is `http://localhost:8001/metrics`. In a second terminal, start Prometheus from the project root using `prometheus.yml`. On machines whose hostname causes URL parsing errors, run:
-
-```bash
-prometheus --config.file=prometheus.yml --web.listen-address=127.0.0.1:9090 --web.external-url=http://localhost:9090/
-```
-
-Run the API instead of the standalone metrics process to expose metrics from API requests:
-
-```bash
-python -m src.api
-```
-
-The API is available at `http://localhost:8000`; its metrics endpoint is `http://localhost:8001/metrics`. Stop any separately running `monitoring.py` process first, or set `METRICS_PORT` to a free port and update `prometheus.yml` to scrape that port. `API_PORT` can change the API port if 8000 is occupied.
-
-To immediately disable automatic customer responses without redeploying, create `storage/AUTO_RESPONSE_DISABLED`; remove that file only after review to re-enable. The operator procedure and limitations are in [docs/governance.md](docs/governance.md).
-
-## Tests
+### 8. Run the tests
 
 ```bash
 python -m pytest tests/ -v
 ```
 
-GitHub Actions runs this offline test suite on pushes and pull requests. Model API calls are not part of CI.
+- Tests run offline and do not require a provider API call.
+
+### 9. Start the API
+
+```bash
+python -m src.api
+```
+
+- API: `http://localhost:8000`
+- Swagger UI: `http://localhost:8000/docs`
+- Metrics: `http://localhost:8001/metrics`
+- Stop the application with `Ctrl+C`.
+
+## Optional operations
+
+- Disable automatic responses immediately by creating `storage/AUTO_RESPONSE_DISABLED`.
+- Remove that file only after review to re-enable automatic responses.
+- Run metrics without the API:
+
+```bash
+python monitoring.py
+```
+
+- Start Prometheus from a second terminal:
+
+```bash
+prometheus --config.file=prometheus.yml
+```
+
+- If Prometheus has hostname URL errors:
+
+```bash
+prometheus --config.file=prometheus.yml --web.listen-address=127.0.0.1:9090 --web.external-url=http://localhost:9090/
+```
+
+- If port `8000` is occupied, set `API_PORT` in `.env`.
+- If port `8001` is occupied, set `METRICS_PORT` in `.env` and update `prometheus.yml` accordingly.
 
 ## Evaluation
 
-Build the vector index first. The harness requires an input ticket file and an output report path, so the same command can accept the hidden set without code changes:
+- Complete the database and vector-index initialization in setup step 7 before evaluation.
+- The hidden/validation input can be passed directly without code changes.
+- Configure a real `OPENROUTER_API_KEY` for a valid provider-backed gate run; model calls may incur cost or rate limits.
+- Run a validation gate with a new output path:
 
 ```bash
 python -m evaluation.harness data/validation_tickets.json evaluation/results/validation_run01.json --gate
 ```
 
-Use a new output path for each run. The matching `<output>.decisions.db` is deleted and rebuilt when that path is evaluated again. The run log defaults to `evaluation/results/run_log.jsonl`; set `--run-log` to use a separate log. A labelled input must contain the ticket and label fields required by the harness. For a real provider-backed gate run, configure `OPENROUTER_API_KEY` in `.env`; evaluation makes model calls and may incur cost or hit provider rate limits.
-
-For tickets that have matching records in `ground_truth_responses.json`, include the optional reference file to score literal required mentions and prohibited claims. These checks do not semantically compare a response with the full reference answer:
+- Use a different output path for every run; the matching `.decisions.db` is deleted and rebuilt when that path is reused.
+- A labelled input must contain the ticket and label fields required by the harness.
+- Run the development set with literal reference checks when matching ground-truth records are available:
 
 ```bash
 python -m evaluation.harness data/development_tickets.json evaluation/results/development_run01.json --ground-truth data/ground_truth_responses.json --gate
 ```
 
-Without `--gate`, the command prints the gate results but exits successfully even if a target failed. With `--gate`, exit code 1 means at least one measured target failed or the run was invalid. Check both `gate.passed` and `validity.valid_for_gate` in the JSON report. A simulated provider outage is a resilience test, not a valid performance-gate run:
+- Without `--gate`, failures are reported but the command exits successfully.
+- With `--gate`, exit code `1` means a target failed or the run was invalid.
+- Check both `gate.passed` and `validity.valid_for_gate` in the JSON report.
+- Test outage behavior with:
 
 ```bash
 python -m evaluation.harness data/validation_tickets.json evaluation/results/outage_check.json --simulate-provider-outage --run-log evaluation/results/outage_run_log.jsonl
 ```
 
-The report includes intent, urgency, route, and answerability accuracy; retrieval Hit@K and Recall@K; automated citation-ID precision and recall against expected document IDs; protected-ticket violations; slices by tier, region, language fluency, and ticket length; per-class precision with a confusion matrix; confidence calibration bands; end-to-end p95 latency; per-stage timing; and a results table with baseline, target, achieved value and status. Citation-ID metrics do not establish that a source semantically supports each response sentence. The “first contact resolution” measure is a proxy based on automatic responses, not a measured customer resolution.
+### Evaluation notes
 
-How the run works:
+- The pipeline processes tickets through `process_ticket_endpoint` in-process; HTTP/network behavior is not tested.
+- Ground-truth labels are withheld from routing.
+- The per-run database is reconciled against processed tickets.
+- Offline fallback, simulated outage, or an active kill switch makes `valid_for_gate: false`.
+- The default run log is `evaluation/results/run_log.jsonl`; override it with `--run-log`.
+- `--no-warm-up` skips embedding-model preloading.
+- The report includes accuracy, retrieval, citation, safety, fairness slices, calibration, latency, and gate results.
+- Citation-ID checks do not prove semantic support for each response sentence.
+- First-contact resolution is an automatic-response proxy, not a measured customer outcome.
+- Stage latency values are separate from end-to-end latency and cannot be summed to obtain its percentile.
+- The validation population labels 40% of tickets for escalation, while the configured target is at most 30%; do not override safety labels to force the target.
+- The report requires human review for hallucination rate, semantic citation accuracy, and satisfaction.
 
-- Every ticket goes through the real API processing pipeline (`process_ticket_endpoint`) with ground-truth labels withheld. The run uses the same routing and guardrail code, but calls the endpoint in-process rather than exercising HTTP/network behavior. The per-run decision database (`<output>.decisions.db`) is reconciled against processed tickets.
-- A run using the offline fallback, a simulated outage or an active kill switch is marked `valid_for_gate: false`. A real gate run needs a configured `OPENROUTER_API_KEY`.
-- Each run is appended to `evaluation/results/run_log.jsonl` (override with `--run-log`) so results can be compared with earlier runs of the same input.
-- `--gate` returns exit code 1 when a measured target is missed or the run is invalid. `--simulate-provider-outage` checks that every ticket escalates when the provider fails. `--no-warm-up` skips the embedding model pre-load.
-- `service.stage_latency_seconds` summarizes classification, retrieval, and generation durations separately for stages that ran. Overall ticket latency remains the end-to-end in-process measurement; stage percentiles cannot be added to obtain the overall percentile.
-- The saved validation data labels 40% of tickets for escalation, while the configured escalation target is 30% or lower. The report calls out this target/population conflict; do not force the rate lower by overriding safety labels.
+### Human review
 
-Hallucination rate, semantic citation accuracy and satisfaction need human judgement. Export a seeded sample (default 50 returned responses) for two assessors. Reviewers should work independently; preserve the exported files and enter both sets of ratings without re-exporting, because export recreates the CSVs. If fewer than 50 responses are available, the minimum-sample flag remains false.
+- Export a seeded sample for two independent assessors:
 
 ```bash
 python -m evaluation.review export evaluation/results/validation_run01.json evaluation/results/review_run01
-# assessor A fills the a_* columns and assessor B the b_* columns, independently
+```
+
+- Assessor A fills the `a_*` columns; assessor B independently fills the `b_*` columns.
+- Preserve the exported files and do not re-export before scoring, because export recreates the review CSVs.
+- The default requested sample is 50 responses; the minimum-sample flag remains false when fewer responses are available.
+- Score the completed reviews:
+
+```bash
 python -m evaluation.review score evaluation/results/review_run01
 ```
 
-To include the review summary in an evaluation report, the current harness must be run again with `--human-review`, for example with a distinct output path:
+- Add the review summary with a new evaluation report:
 
 ```bash
 python -m evaluation.harness data/validation_tickets.json evaluation/results/validation_reviewed_run.json --human-review evaluation/results/review_run01/review_summary.json --gate
 ```
 
-This reruns provider inference, may incur additional cost, and can produce different responses; the harness does not currently bind review rows to the same run's ticket outputs. Keep the original inference report and document this limitation when interpreting the combined report. Repeat contacts cannot be measured offline because the datasets do not link follow-up tickets to the assistant's responses. For assessment, pass a labelled dataset path first and a new output path second. See [docs/governance.md](docs/governance.md) for metric definitions and review guidance.
+- This command reruns provider inference, may incur additional cost, and may produce different responses.
+- Review rows are not currently bound to the same run's outputs; retain the original report and document this limitation.
+- Repeat contacts cannot be measured offline because datasets do not link follow-up tickets to earlier responses.
+- See `docs/governance.md` for metric definitions and review guidance.
