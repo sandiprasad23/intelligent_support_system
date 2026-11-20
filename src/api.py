@@ -15,7 +15,7 @@ from src.guardrails import (
     detect_private_data,
 )
 from src.ingest import normalize_ticket
-from src.logging_store import log_decision
+from src.logging_store import log_decision, update_decision_for_kill_switch
 from src.monitoring import (
     CLASSIFICATION_CONFIDENCE,
     GUARDRAIL_BLOCKS,
@@ -121,7 +121,7 @@ def _log_ticket_decision(
         model_name = "provider-budget-exhausted"
     else:
         model_name = env_value("MODEL_NAME")
-    log_decision(
+    return log_decision(
         ticket_id=ticket.ticket_id,
         stage=stage,
         prediction=classification.get("intent", "unclear_request"),
@@ -209,8 +209,9 @@ def _process_valid_ticket(ticket, audit_state):
     started = perf_counter()
     normalized_ticket = normalize_ticket(ticket.model_dump())
     normalized_ticket["raw"]["labels"] = ticket.labels.model_dump(exclude_none=True)
-    injection_findings = detect_instruction_injection(ticket.subject + "\n" + ticket.body)
-    privacy_findings = detect_private_data(ticket.subject + "\n" + ticket.body)
+    screening_text = normalized_ticket["subject"] + "\n" + normalized_ticket["body"]
+    injection_findings = detect_instruction_injection(screening_text)
+    privacy_findings = detect_private_data(screening_text)
     kill_switch_was_active = auto_response_disabled()
 
     stage_results = {
@@ -363,7 +364,7 @@ def _process_valid_ticket(ticket, audit_state):
     }
 
     confidence = float(classification.get("confidence", 0.0))
-    _log_ticket_decision(
+    decision_id = _log_ticket_decision(
         ticket,
         classification,
         documents,
@@ -372,6 +373,23 @@ def _process_valid_ticket(ticket, audit_state):
         guardrail_results,
     )
     audit_state["written"] = True
+
+    if route["action"] == "auto_respond" and auto_response_disabled():
+        route["action"] = "escalate"
+        route["reason"] = "Automatic responses were disabled before the draft could be returned."
+        guardrail_results["kill_switch"] = "active"
+        stage_results["kill_switch"] = "blocked_before_response"
+        stage_results["routing"] = {
+            "action": route["action"],
+            "threshold": route.get("threshold"),
+            "reason": route["reason"],
+        }
+        generated_response = None
+        update_decision_for_kill_switch(
+            decision_id, route["reason"], stage_results, guardrail_results
+        )
+        GUARDRAIL_BLOCKS.labels(guardrail="kill_switch").inc()
+
     try:
         TICKETS_PROCESSED.labels(channel=ticket.channel, outcome=route["action"]).inc()
         RESPONSE_LATENCY.observe(perf_counter() - started)

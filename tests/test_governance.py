@@ -330,13 +330,20 @@ def test_post_generation_kill_switch_suppresses_draft(monkeypatch):
         lambda *args, **kwargs: {
             "passed": True,
             "violations": [],
-            "results": {"private_data": True, "grounding": True, "tone_scope": True},
+            "results": {
+                "private_data": True,
+                "grounding": True,
+                "tone_scope": True,
+                "instruction_integrity": True,
+            },
             "sanitized_response": "Evidence [Doc ID: DOC-1]",
         },
     )
-    switch_states = iter((False, True))
+    switch_states = iter((False, False, True))
     monkeypatch.setattr(api, "auto_response_disabled", lambda: next(switch_states))
-    monkeypatch.setattr(api, "log_decision", lambda **kwargs: None)
+    persisted_updates = []
+    monkeypatch.setattr(api, "update_decision_for_kill_switch", lambda *args: persisted_updates.append(args))
+    monkeypatch.setattr(api, "log_decision", lambda **kwargs: "decision-1")
 
     result = api.process_ticket_endpoint(
         api.TicketRequest(ticket_id="TEST-KILL", subject="Question", body="Please help")
@@ -344,6 +351,8 @@ def test_post_generation_kill_switch_suppresses_draft(monkeypatch):
 
     assert result["action"] == "escalate"
     assert result["response_text"] is None
+    assert result["reason"] == "Automatic responses were disabled before the draft could be returned."
+    assert persisted_updates[0][0] == "decision-1"
 
 
 def test_retrieval_escalation_marks_outbound_guardrails_not_run(monkeypatch):

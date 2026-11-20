@@ -134,6 +134,7 @@ def log_decision(
         {"summary": guardrails} if isinstance(guardrails, str) else (guardrails or {}),
         ensure_ascii=True,
     )
+    decision_id = str(uuid.uuid4())
     with sqlite3.connect(database_path) as connection:
         connection.execute(
             """
@@ -145,7 +146,7 @@ def log_decision(
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                str(uuid.uuid4()),
+                decision_id,
                 datetime.now(timezone.utc).isoformat(),
                 ticket_id,
                 stage,
@@ -164,6 +165,33 @@ def log_decision(
                 json.dumps(alternatives or [], ensure_ascii=True),
                 json.dumps(stage_results or {}, ensure_ascii=True),
                 json.dumps(guardrail_results or {}, ensure_ascii=True),
+            ),
+        )
+    return decision_id
+
+
+def update_decision_for_kill_switch(decision_id, reason, stage_results, guardrail_results):
+    """Keep the persisted route consistent if the kill switch activates after insertion."""
+    if not decision_id:
+        return
+    database_path = _database_path_from_config()
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            """
+            UPDATE decisions
+               SET action_taken = 'escalate',
+                   reason = ?,
+                   stage_results = ?,
+                   guardrail_results = ?,
+                   guardrails = ?
+             WHERE decision_id = ?
+            """,
+            (
+                reason,
+                json.dumps(stage_results or {}, ensure_ascii=True),
+                json.dumps(guardrail_results or {}, ensure_ascii=True),
+                json.dumps({"summary": "kill_switch_active"}, ensure_ascii=True),
+                decision_id,
             ),
         )
 
