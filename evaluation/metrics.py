@@ -2,7 +2,7 @@ import math
 import re
 import statistics
 
-CITATION_PATTERN = re.compile(r"\[Doc ID:\s*([^\]]+)\]")
+CITATION_PATTERN = re.compile(r"\[Doc ID:\s*([^\]]+)\]", re.IGNORECASE)
 
 
 def percentile(values, fraction):

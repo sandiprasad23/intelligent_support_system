@@ -27,10 +27,17 @@ CITATION_COLUMNS = [
 def citation_items(response_text):
     """Pair each cited document with the sentence it is attached to."""
     items = []
+    previous_sentence = ""
     for segment in re.split(r"(?<=[.!?])\s+|\n+", response_text):
         cited = list(dict.fromkeys(CITATION_PATTERN.findall(segment)))
         sentence = CITATION_PATTERN.sub("", segment).strip()
-        items.extend((sentence, doc_id.strip()) for doc_id in cited)
+        if sentence:
+            previous_sentence = sentence
+        items.extend(
+            (sentence or previous_sentence, doc_id.strip())
+            for doc_id in cited
+            if sentence or previous_sentence
+        )
     return items
 
 

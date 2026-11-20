@@ -17,8 +17,8 @@ AUDIT_COLUMNS = {
 }
 
 
-def _database_path_from_config():
-    configured_path = env_value("DATABASE_URL")
+def _database_path_from_config(env_name="DATABASE_URL"):
+    configured_path = env_value(env_name)
     if configured_path.startswith("sqlite:///"):
         configured_path = configured_path.removeprefix("sqlite:///")
     database_path = Path(configured_path)
@@ -81,7 +81,9 @@ def reserve_llm_call(limit=None):
     if limit < 1:
         return False
 
-    database_path = _database_path_from_config()
+    database_path = _database_path_from_config(
+        "LLM_USAGE_DATABASE_URL" if os.getenv("LLM_USAGE_DATABASE_URL") else "DATABASE_URL"
+    )
     initialize_database(database_path)
     usage_date = datetime.now(timezone.utc).date().isoformat()
     with sqlite3.connect(database_path, timeout=10) as connection:

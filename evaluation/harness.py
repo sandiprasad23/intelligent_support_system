@@ -517,10 +517,10 @@ def _previous_runs(run_log_path, input_sha):
 
 
 @contextmanager
-def _evaluation_environment(decision_db, call_budget, simulate_outage):
+def _evaluation_environment(decision_db, simulate_outage):
     overrides = {
-        "DATABASE_URL": f"sqlite:///{decision_db}",
-        "MAX_LLM_CALLS_PER_DAY": str(max(call_budget, 1)),
+        "DATABASE_URL": f"sqlite:///{Path(decision_db).resolve()}",
+        "LLM_USAGE_DATABASE_URL": env_value("DATABASE_URL"),
     }
     if simulate_outage:
         overrides["OPENROUTER_API_KEY"] = "simulated-outage-key"
@@ -705,7 +705,7 @@ def run_evaluation(
         review = json.loads(Path(human_review_path).read_text(encoding="utf-8"))
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    decision_db = output_path.with_suffix(".decisions.db")
+    decision_db = output_path.with_suffix(".decisions.db").resolve()
     decision_db.unlink(missing_ok=True)
     input_sha = hashlib.sha256(input_path.read_bytes()).hexdigest()
     previous_runs = _previous_runs(run_log_path, input_sha)
@@ -713,7 +713,7 @@ def run_evaluation(
     kill_switch_active = api.auto_response_disabled()
 
     started_at = datetime.now(timezone.utc)
-    with _evaluation_environment(decision_db, 2 * len(tickets), simulate_provider_outage):
+    with _evaluation_environment(decision_db, simulate_provider_outage):
         warm_up_seconds = warm_up_retriever() if warm_up else None
         rows = [
             _evaluate_ticket(ticket, references.get(ticket["ticket_id"])) for ticket in tickets

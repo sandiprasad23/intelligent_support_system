@@ -30,6 +30,10 @@ def test_sources_are_deduplicated_by_document_keeping_best_score():
     ]
 
 
+def test_long_ticket_identifier_is_not_detected_as_payment_card():
+    assert "payment_card_number" not in detect_private_data("Ticket 2029012345678901")
+
+
 def test_guardrails_block_private_data_unknown_citations_and_unsupported_claims():
     documents = [{"doc_id": "DOC-AUTH-004"}]
 
@@ -76,6 +80,34 @@ def test_kill_switch_stale_docs_and_unranked_fallback_force_escalation(tmp_path,
 
     fallback = {**relevant_doc, "retrieval_mode": "json_fallback"}
     assert determine_route(ticket, classification, [fallback])["action"] == "escalate"
+
+
+def test_missing_document_review_age_fails_closed(monkeypatch):
+    monkeypatch.setenv("AUTO_RESPONSE_KILL_SWITCH_FILE", "/nonexistent/kill-switch")
+    document = {
+        "doc_id": "DOC-1",
+        "review_age_days": None,
+        "retrieval_mode": "vector",
+        "score": 0.99,
+    }
+
+    result = determine_route(
+        {"raw": {"labels": {}}},
+        {"intent": "configuration_help", "urgency": "low", "confidence": 0.99},
+        [document],
+    )
+
+    assert result["action"] == "escalate"
+
+
+def test_malformed_confidence_setting_fails_closed(monkeypatch):
+    monkeypatch.setenv("CONFIDENCE_THRESHOLD", "not-a-number")
+    result = determine_route(
+        {"raw": {"labels": {}}},
+        {"intent": "configuration_help", "urgency": "low", "confidence": 0.99},
+        [{"doc_id": "DOC-1", "review_age_days": 0, "retrieval_mode": "vector", "score": 0.99}],
+    )
+    assert result["action"] == "escalate"
 
 
 def test_missing_or_weak_retrieval_scores_force_escalation(monkeypatch):
@@ -302,7 +334,7 @@ def test_post_generation_kill_switch_suppresses_draft(monkeypatch):
             "sanitized_response": "Evidence [Doc ID: DOC-1]",
         },
     )
-    switch_states = iter((True,))
+    switch_states = iter((False, True))
     monkeypatch.setattr(api, "auto_response_disabled", lambda: next(switch_states))
     monkeypatch.setattr(api, "log_decision", lambda **kwargs: None)
 

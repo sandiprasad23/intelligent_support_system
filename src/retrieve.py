@@ -49,7 +49,7 @@ def retrieve_docs(ticket: dict, intent: str, top_k: int = 3) -> list:
         with doc_path.open(encoding="utf-8") as source:
             source_docs = json.load(source)
     review_age_by_id = {
-        document["doc_id"]: document.get("last_reviewed_days_ago", 0)
+        document["doc_id"]: document.get("last_reviewed_days_ago")
         for document in source_docs
     }
 

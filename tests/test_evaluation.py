@@ -198,6 +198,12 @@ def test_review_export_and_score_round_trip(tmp_path):
     assert summary["satisfaction_mean"] == 4.5
 
 
+def test_review_citation_parsing_handles_case_and_trailing_citations():
+    assert review.citation_items(
+        "Rotate the key.\n[doc id: DOC-AUTH-004]"
+    ) == [("Rotate the key.", "DOC-AUTH-004")]
+
+
 @pytest.mark.parametrize("intent", ["compliance_request", "feature_request", "unclear_request"])
 def test_always_human_intents_escalate_even_when_confident(intent):
     from src.route import determine_route

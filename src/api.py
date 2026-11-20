@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from src.classify import CLASSIFY_PROMPT_VERSION, classify_ticket
-from src.config import env_value
+from src.config import env_float, env_value
 from src.generate import GENERATE_PROMPT_VERSION, generate_response
 from src.guardrails import (
     check_pii_and_hallucinations,
@@ -86,6 +86,10 @@ def _unique_sources(documents):
     return [{"doc_id": doc_id, "score": score} for doc_id, score in best_scores.items()]
 
 
+def _configured_confidence_threshold():
+    return env_float("CONFIDENCE_THRESHOLD", safe_value=float("nan"))
+
+
 def _log_ticket_decision(
     ticket,
     classification,
@@ -96,6 +100,9 @@ def _log_ticket_decision(
     stage="pipeline_complete",
 ):
     source_records = _unique_sources(documents)
+    threshold = route.get("threshold")
+    if threshold is None:
+        threshold = _configured_confidence_threshold()
     prompt_versions = []
     classification_stage = stage_results.get("classification")
     if classification_stage and classification_stage != "skipped_input_safeguard":
@@ -119,7 +126,7 @@ def _log_ticket_decision(
         stage=stage,
         prediction=classification.get("intent", "unclear_request"),
         confidence=classification.get("confidence", 0.0),
-        threshold=route.get("threshold", float(env_value("CONFIDENCE_THRESHOLD"))),
+        threshold=threshold,
         action_taken=route["action"],
         reason=route["reason"],
         sources_used=source_records,
@@ -163,7 +170,7 @@ def process_ticket_endpoint(ticket: TicketRequest):
         failure_route = {
             "action": "escalate",
             "reason": "A processing failure occurred; no response was sent.",
-            "threshold": float(env_value("CONFIDENCE_THRESHOLD")),
+            "threshold": _configured_confidence_threshold(),
         }
         if not audit_state["written"]:
             try:
@@ -238,7 +245,7 @@ def _process_valid_ticket(ticket, audit_state):
                 if injection_findings
                 else "Ticket contains a recognized sensitive-data pattern; it was not sent to the model provider."
             ),
-            "threshold": float(env_value("CONFIDENCE_THRESHOLD")),
+            "threshold": _configured_confidence_threshold(),
         }
         skip_reason = "skipped_input_safeguard"
         stage_results["classification"] = skip_reason

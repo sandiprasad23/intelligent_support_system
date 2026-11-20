@@ -8,9 +8,9 @@ SECRET_PATTERNS = (
 PRIVATE_DATA_PATTERNS = {
     "email_address": re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE),
     "customer_identifier": re.compile(r"\bCUST-\d{3,}\b", re.IGNORECASE),
-    "payment_card_number": re.compile(r"\b(?:\d[ -]*?){13,19}\b"),
     "phone_number": re.compile(r"(?<!\w)\+?\d[\d(). -]{7,}\d(?!\w)"),
 }
+CARD_NUMBER_PATTERN = re.compile(r"(?<!\d)(?:\d[ -]?){12,18}\d(?!\d)")
 INJECTION_PATTERNS = (
     re.compile(r"ignore\s+(all\s+)?(previous|prior|above)\s+instructions", re.IGNORECASE),
     re.compile(r"reveal\s+(the\s+)?(system|developer)\s+prompt", re.IGNORECASE),
@@ -40,6 +40,17 @@ def detect_instruction_injection(ticket_text: str) -> list[str]:
     return matches
 
 
+def _is_valid_card_number(candidate: str) -> bool:
+    digits = re.sub(r"\D", "", candidate)
+    if not 13 <= len(digits) <= 19:
+        return False
+    checksum = 0
+    for index, digit in enumerate(reversed(digits)):
+        value = int(digit) * (2 if index % 2 else 1)
+        checksum += value - 9 if value > 9 else value
+    return checksum % 10 == 0
+
+
 def detect_private_data(text: str) -> list[str]:
     findings = []
     if any(pattern.search(text) for pattern in SECRET_PATTERNS):
@@ -47,6 +58,10 @@ def detect_private_data(text: str) -> list[str]:
     for name, pattern in PRIVATE_DATA_PATTERNS.items():
         if pattern.search(text):
             findings.append(name)
+    for match in CARD_NUMBER_PATTERN.finditer(text):
+        if _is_valid_card_number(match.group()):
+            findings.append("payment_card_number")
+            break
     return findings
 
 
@@ -62,6 +77,12 @@ def check_pii_and_hallucinations(response_text: str, retrieved_docs: list) -> di
     for name, pattern in PRIVATE_DATA_PATTERNS.items():
         if pattern.search(response_text):
             sanitized_text = pattern.sub("[REDACTED_PRIVATE_DATA]", sanitized_text)
+    sanitized_text = CARD_NUMBER_PATTERN.sub(
+        lambda match: "[REDACTED_PRIVATE_DATA]"
+        if _is_valid_card_number(match.group())
+        else match.group(),
+        sanitized_text,
+    )
 
     violations.extend(
         f"private_data:{finding}" for finding in detect_private_data(response_text)
